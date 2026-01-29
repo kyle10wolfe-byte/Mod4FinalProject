@@ -1,130 +1,82 @@
-// IMPORTANT: Put poster images in /assets/posters/ with the filenames below.
-// This avoids broken links and makes your project reliable for grading.
-
-const movies = [
-  {
-    title: "The Fast and the Furious",
-    year: 2001,
-    released: "2001-06-22",
-    tagline: "An undercover cop infiltrates the street racing scene.",
-    genre: "Action",
-    poster: "assets/posters/fast1-2001.jpg"
-  },
-  {
-    title: "2 Fast 2 Furious",
-    year: 2003,
-    released: "2003-06-06",
-    tagline: "Miami. Fast cars. Bigger stakes.",
-    genre: "Action",
-    poster: "assets/posters/fast2-2003.jpg"
-  },
-  {
-    title: "The Fast and the Furious: Tokyo Drift",
-    year: 2006,
-    released: "2006-06-16",
-    tagline: "A new world of drifting in Tokyo.",
-    genre: "Action",
-    poster: "assets/posters/fast3-2006.jpg"
-  },
-  {
-    title: "Fast & Furious",
-    year: 2009,
-    released: "2009-04-03",
-    tagline: "Back to LA. Back to the crew.",
-    genre: "Action",
-    poster: "assets/posters/fast4-2009.jpg"
-  },
-  {
-    title: "Fast Five",
-    year: 2011,
-    released: "2011-04-29",
-    tagline: "The crew pulls a massive heist in Rio.",
-    genre: "Action",
-    poster: "assets/posters/fast5-2011.jpg"
-  },
-  {
-    title: "Fast & Furious 6",
-    year: 2013,
-    released: "2013-05-24",
-    tagline: "A global mission brings the team back together.",
-    genre: "Action",
-    poster: "assets/posters/fast6-2013.jpg"
-  },
-  {
-    title: "Furious 7",
-    year: 2015,
-    released: "2015-04-03",
-    tagline: "One last ride against a dangerous new threat.",
-    genre: "Action",
-    poster: "assets/posters/fast7-2015.jpg"
-  },
-  {
-    title: "The Fate of the Furious",
-    year: 2017,
-    released: "2017-04-14",
-    tagline: "Loyalty is tested when Dom goes rogue.",
-    genre: "Action",
-    poster: "assets/posters/fast8-2017.jpg"
-  },
-  {
-    title: "Fast & Furious Presents: Hobbs & Shaw",
-    year: 2019,
-    released: "2019-08-02",
-    tagline: "Two rivals team up to stop a global threat.",
-    genre: "Action",
-    poster: "assets/posters/hobbs-shaw-2019.jpg"
-  },
-  {
-    title: "F9: The Fast Saga",
-    year: 2021,
-    released: "2021-06-25",
-    tagline: "Family faces the past — and a new enemy.",
-    genre: "Action",
-    poster: "assets/posters/f9-2021.jpg"
-  },
-  {
-    title: "Fast X",
-    year: 2023,
-    released: "2023-05-19",
-    tagline: "A new villain targets the family’s legacy.",
-    genre: "Action",
-    poster: "assets/posters/fastx-2023.jpg"
-  }
-];
+const OMDB_API_KEY = "461e2031";
+const OMDB_BASE_URL = "https://www.omdbapi.com/";
 
 const cardsEl = document.getElementById("cards");
 const sortSelect = document.getElementById("sortSelect");
-const movieCountEl = document.getElementById("movieCount");
 const yearEl = document.getElementById("year");
 
-function formatDate(iso) {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+const queryInput = document.getElementById("queryInput");
+const searchBtn = document.getElementById("searchBtn");
+const statusEl = document.getElementById("status");
+
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+
+const resultCountEl = document.getElementById("resultCount");
+const pageInfoEl = document.getElementById("pageInfo");
+
+let movies = [];
+let currentQuery = "";
+let currentPage = 1;
+let totalResults = 0;
+
+function setStatus(msg) {
+  statusEl.textContent = msg || "";
+}
+
+function normalizePoster(p) {
+  return p && p !== "N/A" ? p : "";
+}
+
+function safeYearToNumber(yearStr) {
+  // OMDb can return "2017–2019" or "N/A"
+  const n = parseInt(yearStr, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function sortMovies(mode) {
+  const sorted = [...movies];
+
+  if (mode === "az") sorted.sort((a, b) => a.title.localeCompare(b.title));
+  if (mode === "za") sorted.sort((a, b) => b.title.localeCompare(a.title));
+  if (mode === "newest") sorted.sort((a, b) => safeYearToNumber(b.year) - safeYearToNumber(a.year));
+  if (mode === "oldest") sorted.sort((a, b) => safeYearToNumber(a.year) - safeYearToNumber(b.year));
+
+  return sorted;
 }
 
 function render(list) {
   cardsEl.innerHTML = "";
 
   list.forEach((m) => {
+    const posterUrl = normalizePoster(m.poster);
+
     const card = document.createElement("article");
     card.className = "card";
 
     card.innerHTML = `
       <div class="poster">
-        <img src="${m.poster}" alt="Poster: ${m.title}" loading="lazy" />
+        ${
+          posterUrl
+            ? `<img src="${posterUrl}" alt="Poster: ${m.title}" loading="lazy" />`
+            : `<div style="padding:18px; text-align:center; color:rgba(11,27,58,0.65); font-weight:900;">
+                 No Poster
+               </div>`
+        }
       </div>
+
       <div class="card-body">
         <div class="card-top">
-          <span class="badge">${m.genre}</span>
-          <span class="muted" style="font-size:12px;font-weight:900;">${m.year}</span>
+          <span class="badge">${m.rated || m.type || "Movie"}</span>
+          <span class="muted" style="font-size:12px;font-weight:900;">${m.year || ""}</span>
         </div>
 
         <h3>${m.title}</h3>
-        <p>${m.tagline}</p>
+        <p>${m.plot || "No plot available."}</p>
 
         <div class="meta">
-          <span>Released</span>
-          <span>${formatDate(m.released)}</span>
+          <span>${m.runtime || "—"}</span>
+          <span>${m.genre ? m.genre.split(",")[0] : "—"}</span>
         </div>
       </div>
     `;
@@ -132,30 +84,123 @@ function render(list) {
     cardsEl.appendChild(card);
   });
 
-  movieCountEl.textContent = String(list.length);
+  resultCountEl.textContent = String(totalResults || list.length);
+  const totalPages = Math.max(1, Math.ceil((totalResults || list.length) / 10));
+  pageInfoEl.textContent = `${currentPage} / ${totalPages}`;
+
+  prevBtn.disabled = currentPage <= 1;
+  nextBtn.disabled = currentPage >= totalPages;
 }
 
-function sortMovies(mode) {
-  const sorted = [...movies];
+// OMDb helper
+async function omdbRequest(params) {
+  const url = new URL(OMDB_BASE_URL);
+  url.searchParams.set("apikey", OMDB_API_KEY);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
-  if (mode === "az") {
-    sorted.sort((a, b) => a.title.localeCompare(b.title));
-  } else if (mode === "za") {
-    sorted.sort((a, b) => b.title.localeCompare(a.title));
-  } else if (mode === "newest") {
-    sorted.sort((a, b) => new Date(b.released) - new Date(a.released));
-  } else if (mode === "oldest") {
-    sorted.sort((a, b) => new Date(a.released) - new Date(b.released));
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`Network error (${res.status})`);
+
+  const data = await res.json();
+  if (data.Response === "False") throw new Error(data.Error || "OMDb error");
+  return data;
+}
+
+// Search by title (returns up to 10 results per page)
+async function omdbSearch(query, page) {
+  return omdbRequest({ s: query, type: "movie", page: String(page) });
+}
+
+// Details by IMDb ID (returns poster + plot + rated, etc.)
+async function omdbDetails(imdbID) {
+  const d = await omdbRequest({ i: imdbID, plot: "short" });
+  return {
+    imdbID: d.imdbID,
+    title: d.Title,
+    year: d.Year,
+    type: d.Type,
+    poster: d.Poster,
+    plot: d.Plot,
+    rated: d.Rated,
+    runtime: d.Runtime,
+    genre: d.Genre
+  };
+}
+
+// Main fetch for one page, then details for each result
+async function fetchPage(query, page) {
+  const searchData = await omdbSearch(query, page);
+  totalResults = parseInt(searchData.totalResults, 10) || 0;
+
+  const items = searchData.Search || [];
+
+  // Fetch details for each result (poster + plot)
+  // Note: This is 10 requests max per page, acceptable for class projects.
+  const detailed = await Promise.all(items.map((it) => omdbDetails(it.imdbID)));
+
+  return detailed;
+}
+
+async function runSearch(query, page) {
+  if (!OMDB_API_KEY || OMDB_API_KEY === "PUT_YOUR_OMDB_KEY_HERE") {
+    setStatus("Add your OMDb API key in script.js first.");
+    return;
   }
 
-  return sorted;
+  try {
+    setStatus("Loading…");
+    searchBtn.disabled = true;
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+
+    currentQuery = query;
+    currentPage = page;
+
+    movies = await fetchPage(query, page);
+    setStatus(`Showing results for “${query}”.`);
+
+    render(sortMovies(sortSelect.value));
+  } catch (err) {
+    movies = [];
+    totalResults = 0;
+    cardsEl.innerHTML = "";
+    resultCountEl.textContent = "0";
+    pageInfoEl.textContent = "—";
+    setStatus(`Error: ${err.message}`);
+  } finally {
+    searchBtn.disabled = false;
+    // render() sets correct disabled state after success
+  }
 }
 
-// Init
-yearEl.textContent = new Date().getFullYear();
-render(sortMovies(sortSelect.value));
+// Events
+searchBtn.addEventListener("click", () => {
+  const q = (queryInput.value || "").trim();
+  if (!q) {
+    setStatus("Type a movie title to search.");
+    queryInput.focus();
+    return;
+  }
+  runSearch(q, 1);
+});
 
-// Sorting filter (required feature)
+queryInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") searchBtn.click();
+});
+
 sortSelect.addEventListener("change", (e) => {
   render(sortMovies(e.target.value));
 });
+
+prevBtn.addEventListener("click", () => {
+  if (currentPage > 1) runSearch(currentQuery, currentPage - 1);
+});
+
+nextBtn.addEventListener("click", () => {
+  const totalPages = Math.max(1, Math.ceil(totalResults / 10));
+  if (currentPage < totalPages) runSearch(currentQuery, currentPage + 1);
+});
+
+// Init
+yearEl.textContent = new Date().getFullYear();
+setStatus("Search for any movie to get started.");
